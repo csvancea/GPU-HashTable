@@ -25,21 +25,21 @@ __device__ unsigned int computeHash(int key)
  * Function constructor GpuHashTable
  * Performs init
  */
-GpuHashTable::GpuHashTable(int size) : table(nullptr), count(0), size(size), getBatchBuffer(nullptr) {
+GpuHashTable::GpuHashTable(int size) : devTable(nullptr), numItems(0), size(size), getBatchBuffer(nullptr) {
 	cudaError_t err;
 
-	err = glbGpuAllocator->_cudaMalloc((void **) &table, size * sizeof(struct kv));
+	err = glbGpuAllocator->_cudaMalloc((void **) &devTable, size * sizeof(struct kv));
 	cudaCheckError(err);
 
 	/* set everything to KEY_INVALID */
-	cudaMemset(table, KEY_INVALID, size * sizeof(struct kv));
+	cudaMemset(devTable, KEY_INVALID, size * sizeof(struct kv));
 }
 
 /**
  * Function desctructor GpuHashTable
  */
 GpuHashTable::~GpuHashTable() {
-	glbGpuAllocator->_cudaFree(table);
+	glbGpuAllocator->_cudaFree(devTable);
 	if (getBatchBuffer) {
 		free(getBatchBuffer);
 	}
@@ -70,7 +70,7 @@ __global__ void kernel_reshape(struct GpuHashTable::kv *oldTable, int oldSize, s
 		old = atomicCAS(&newTable[i].key, KEY_INVALID, key);
 
 		if (old == KEY_INVALID) {
-			/* table[i].key was set previously */
+			/* newTable[i].key was set previously */
 			newTable[i].value = value;
 			break;
 		}
@@ -95,12 +95,12 @@ void GpuHashTable::reshape(int numBucketsReshape) {
 	/* trick to round up result of size/THREADS_PER_BLOCK */
 	numBlocks = (size + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
 
-	kernel_reshape<<<numBlocks, THREADS_PER_BLOCK>>>(table, size, devNewTable, numBucketsReshape);
+	kernel_reshape<<<numBlocks, THREADS_PER_BLOCK>>>(devTable, size, devNewTable, numBucketsReshape);
 	err = cudaDeviceSynchronize();
 	cudaCheckError(err);
 
-	glbGpuAllocator->_cudaFree(table);
-	table = devNewTable;
+	glbGpuAllocator->_cudaFree(devTable);
+	devTable = devNewTable;
 	size = numBucketsReshape;
 }
 
@@ -141,12 +141,12 @@ bool GpuHashTable::insertBatch(int *keys, int* values, int numKeys) {
 	int *devKeys, *devValues;
 	int numBlocks;
 
-	if (count + numKeys > size) {
+	if (numItems + numKeys > size) {
 		int newSize = size;
 
 		do {
 			newSize *= 2;
-		} while (count + numKeys > newSize);
+		} while (numItems + numKeys > newSize);
 
 		reshape(newSize);
 	}
@@ -163,14 +163,14 @@ bool GpuHashTable::insertBatch(int *keys, int* values, int numKeys) {
 	/* trick to round up result of numKeys/THREADS_PER_BLOCK */
 	numBlocks = (numKeys + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
 
-	kernel_insertBatch<<<numBlocks, THREADS_PER_BLOCK>>>(table, size, devKeys, devValues, numKeys);
+	kernel_insertBatch<<<numBlocks, THREADS_PER_BLOCK>>>(devTable, size, devKeys, devValues, numKeys);
 	err = cudaDeviceSynchronize();
 	cudaCheckError(err);
 
 	glbGpuAllocator->_cudaFree(devValues);
 	glbGpuAllocator->_cudaFree(devKeys);
 
-	count += numKeys;
+	numItems += numKeys;
 	return true;
 }
 
@@ -217,7 +217,7 @@ int* GpuHashTable::getBatch(int* keys, int numKeys) {
 	/* trick to round up result of numKeys/THREADS_PER_BLOCK */
 	numBlocks = (numKeys + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
 
-	kernel_getBatch<<<numBlocks, THREADS_PER_BLOCK>>>(table, size, devKeysValues, numKeys);
+	kernel_getBatch<<<numBlocks, THREADS_PER_BLOCK>>>(devTable, size, devKeysValues, numKeys);
 
 	/* alloc the returned vector while GPU is retrieving the values */
 	getBatchBuffer = (int *)realloc(getBatchBuffer, numKeys * sizeof(int));

@@ -33,10 +33,10 @@ class GpuHashTable
 
 	private:
 		/* Vector of key:value pairs */
-		kv *table;
+		kv *devTable;
 
 		/* Non-empty slots */
-		int count;
+		int numItems;
 
 		/* Total size (Empty + non-empty slots) */
 		int size;
