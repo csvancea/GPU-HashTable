@@ -40,6 +40,9 @@ class GpuHashTable
 
 		/* Total size (Empty + non-empty slots) */
 		int size;
+
+		/* This buffer is returned to the user in getBatch and is free'd in destructor */
+		int *getBatchBuffer;
 };
 
 #endif

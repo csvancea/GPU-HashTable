@@ -25,7 +25,7 @@ __device__ int computeHash(int key)
  * Function constructor GpuHashTable
  * Performs init
  */
-GpuHashTable::GpuHashTable(int size) : table(nullptr), count(0), size(size) {
+GpuHashTable::GpuHashTable(int size) : table(nullptr), count(0), size(size), getBatchBuffer(nullptr) {
 	cudaError_t err;
 
 	err = glbGpuAllocator->_cudaMalloc((void **) &table, size * sizeof(struct kv));
@@ -40,6 +40,9 @@ GpuHashTable::GpuHashTable(int size) : table(nullptr), count(0), size(size) {
  */
 GpuHashTable::~GpuHashTable() {
 	glbGpuAllocator->_cudaFree(table);
+	if (getBatchBuffer) {
+		free(getBatchBuffer);
+	}
 }
 
 /**
@@ -198,10 +201,12 @@ __global__ void kernel_getBatch(struct GpuHashTable::kv *table, int size, int *k
 /**
  * Function getBatch
  * Gets a batch of key:value, using GPU
+ * 
+ * Note: It'd been better if the caller passed the output vector for values
  */
 int* GpuHashTable::getBatch(int* keys, int numKeys) {
 	cudaError_t err;
-	int *devKeysValues, *retValues;
+	int *devKeysValues;
 	int numBlocks;
 
 	err = glbGpuAllocator->_cudaMalloc((void **) &devKeysValues, numKeys * sizeof(int));
@@ -214,14 +219,15 @@ int* GpuHashTable::getBatch(int* keys, int numKeys) {
 
 	kernel_getBatch<<<numBlocks, THREADS_PER_BLOCK>>>(table, size, devKeysValues, numKeys);
 
-	/* alloc the returned vector while GPU is retrieving the values; TODO: fix leak */
-	retValues = (int *)malloc(numKeys * sizeof(int));
-	DIE(retValues == NULL, "malloc failed");
+	/* alloc the returned vector while GPU is retrieving the values */
+	getBatchBuffer = (int *)realloc(getBatchBuffer, numKeys * sizeof(int));
+	DIE(getBatchBuffer == nullptr, "malloc failed");
 
+	/* wait for the CUDA kernel to finish */
 	err = cudaDeviceSynchronize();
 	cudaCheckError(err);
 
-	cudaMemcpy(retValues, devKeysValues, numKeys * sizeof(int), cudaMemcpyDeviceToHost);
+	cudaMemcpy(getBatchBuffer, devKeysValues, numKeys * sizeof(int), cudaMemcpyDeviceToHost);
 	glbGpuAllocator->_cudaFree(devKeysValues);
-	return retValues;
+	return getBatchBuffer;
 }
