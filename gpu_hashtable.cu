@@ -148,7 +148,6 @@ bool GpuHashTable::insertBatch(int *keys, int* values, int numKeys) {
 		reshape(newSize);
 	}
 
-	/* TODO: try cudaMallocManaged instead of cudaMalloc + cudaMemcpy */
 	err = glbGpuAllocator->_cudaMalloc((void **) &devKeys, numKeys * sizeof(int));
 	cudaCheckError(err);
 
@@ -205,7 +204,6 @@ int* GpuHashTable::getBatch(int* keys, int numKeys) {
 	int *devKeysValues, *retValues;
 	int numBlocks;
 
-	/* TODO: try cudaMallocManaged instead of cudaMalloc + cudaMemcpy */
 	err = glbGpuAllocator->_cudaMalloc((void **) &devKeysValues, numKeys * sizeof(int));
 	cudaCheckError(err);
 
