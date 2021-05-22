@@ -26,7 +26,7 @@ __device__ int computeHash(int key)
  * Performs init
  */
 GpuHashTable::GpuHashTable(int size) : table(nullptr), count(0), size(size) {
-	glbGpuAllocator->_cudaMalloc((void **) table, size * sizeof(struct kv));
+	glbGpuAllocator->_cudaMalloc((void **) &table, size * sizeof(struct kv));
 	cudaCheckError();
 
 	/* set everything to KEY_INVALID */
