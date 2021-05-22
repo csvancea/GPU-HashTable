@@ -9,6 +9,9 @@
 
 #define THREADS_PER_BLOCK 256
 
+#define MIN_LOAD_FACTOR 51
+#define MAX_LOAD_FACTOR 80
+
 using namespace std;
 
 /**
@@ -145,18 +148,17 @@ bool GpuHashTable::insertBatch(int *keys, int* values, int numKeys) {
 	cudaError_t err;
 	int *devKeys, *devValues, *devInsertCounter;
 	int numBlocks, numInsertedKeys;
+	int newLoadFactor, newSize;
 
-	/*
-	 * this block of code guarantees that load factor will always be in interval: [50% ... 100%]
-	 * (as required by the checker)
-	 */
-	if (numItems + numKeys > size) {
-		int newSize = size;
+	/* this block of code guarantees that load factor will always be in the required interval */
+	newLoadFactor = (numItems + numKeys) * 100 / size;
+	if (newLoadFactor >= MAX_LOAD_FACTOR) {
+		/*
+		 * (numItems + numKeys) * 100 / size = MIN_LOAD_FACTOR
+		 * => newSize = ((numItems + numKeys) * 100) / MIN_LOAD_FACTOR
+		 */
 
-		do {
-			newSize *= 2;
-		} while (numItems + numKeys > newSize);
-
+		newSize = ((numItems + numKeys) * 100) / MIN_LOAD_FACTOR;
 		reshape(newSize);
 	}
 
