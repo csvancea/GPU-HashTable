@@ -36,10 +36,10 @@ class GpuHashTable
 		kv *devTable;
 
 		/* Non-empty slots */
-		int numItems;
+		unsigned int numItems;
 
 		/* Total size (Empty + non-empty slots) */
-		int size;
+		unsigned int size;
 
 		/* This buffer is returned to the user in getBatch and is free'd in destructor */
 		int *getBatchBuffer;

@@ -52,8 +52,8 @@ GpuHashTable::~GpuHashTable() {
  * Kernel reshape
  * Performs the reshape on GPU side
  */
-__global__ void kernel_reshape(struct GpuHashTable::kv *oldTable, int oldSize, struct GpuHashTable::kv *newTable, int newSize) {
-	int idx = threadIdx.x + blockDim.x * blockIdx.x;
+__global__ void kernel_reshape(struct GpuHashTable::kv *oldTable, unsigned int oldSize, struct GpuHashTable::kv *newTable, unsigned int newSize) {
+	unsigned int idx = threadIdx.x + blockDim.x * blockIdx.x;
 
 	if (idx >= oldSize)
 		return;
@@ -69,7 +69,7 @@ __global__ void kernel_reshape(struct GpuHashTable::kv *oldTable, int oldSize, s
 	int old;
 
 	/* no stop condition: guaranteed there are enough empty spaces with key = KEY_INVALID */
-	for (int i = hash % newSize; ; i = (i+1) % newSize) {
+	for (unsigned int i = hash % newSize; ; i = (i+1) % newSize) {
 		old = atomicCAS(&newTable[i].key, KEY_INVALID, key);
 
 		if (old == KEY_INVALID) {
@@ -87,7 +87,7 @@ __global__ void kernel_reshape(struct GpuHashTable::kv *oldTable, int oldSize, s
 void GpuHashTable::reshape(int numBucketsReshape) {
 	cudaError_t err;
 	kv *devNewTable;
-	int numBlocks;
+	unsigned int numBlocks;
 
 	err = glbGpuAllocator->_cudaMalloc((void **) &devNewTable, numBucketsReshape * sizeof(struct kv));
 	cudaCheckError(err);
@@ -111,8 +111,8 @@ void GpuHashTable::reshape(int numBucketsReshape) {
  * Kernel insertBatch
  * Performs insertion
  */
-__global__ void kernel_insertBatch(struct GpuHashTable::kv *table, int size, int *keys, int* values, int numKeys, int *insertCounter) {
-	int idx = threadIdx.x + blockDim.x * blockIdx.x;
+__global__ void kernel_insertBatch(struct GpuHashTable::kv *table, unsigned int size, int *keys, int* values, int numKeys, int *insertCounter) {
+	unsigned int idx = threadIdx.x + blockDim.x * blockIdx.x;
 
 	if (idx >= numKeys)
 		return;
@@ -123,7 +123,7 @@ __global__ void kernel_insertBatch(struct GpuHashTable::kv *table, int size, int
 	int old;
 
 	/* no stop condition: guaranteed there are enough empty spaces with key = KEY_INVALID */
-	for (int i = hash % size; ; i = (i+1) % size) {
+	for (unsigned int i = hash % size; ; i = (i+1) % size) {
 		old = atomicCAS(&table[i].key, KEY_INVALID, key);
 
 		/* KEY_INVALID -> insert (empty space); key -> update */
@@ -148,7 +148,7 @@ bool GpuHashTable::insertBatch(int *keys, int* values, int numKeys) {
 	cudaError_t err;
 	int *devKeys, *devValues, *devInsertCounter;
 	int numBlocks, numInsertedKeys;
-	int newLoadFactor, newSize;
+	unsigned int newLoadFactor, newSize;
 
 	/* this block of code guarantees that load factor will always be in the required interval */
 	newLoadFactor = (numItems + numKeys) * 100 / size;
@@ -197,8 +197,8 @@ bool GpuHashTable::insertBatch(int *keys, int* values, int numKeys) {
  * Kernel getBatch
  * Performs retrieval
  */
-__global__ void kernel_getBatch(struct GpuHashTable::kv *table, int size, int *keysValues, int numKeys) {
-	int idx = threadIdx.x + blockDim.x * blockIdx.x;
+__global__ void kernel_getBatch(struct GpuHashTable::kv *table, unsigned int size, int *keysValues, int numKeys) {
+	unsigned int idx = threadIdx.x + blockDim.x * blockIdx.x;
 
 	if (idx >= numKeys)
 		return;
@@ -206,10 +206,10 @@ __global__ void kernel_getBatch(struct GpuHashTable::kv *table, int size, int *k
 	/* keysValues acts as an input+output buffer */
 	int key = keysValues[idx];
 	unsigned int hash = computeHash(key);
-	int maxSteps = size;
+	unsigned int maxSteps = size;
 
 	/* if we can't find a match in "size" steps -> abort (key not found) */
-	for (int i = hash % size; maxSteps != 0; i = (i+1) % size, maxSteps--) {
+	for (unsigned int i = hash % size; maxSteps != 0; i = (i+1) % size, maxSteps--) {
 		if (table[i].key == key) {
 			keysValues[idx] = table[i].value;
 			break;
