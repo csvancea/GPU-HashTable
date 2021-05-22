@@ -15,10 +15,10 @@ using namespace std;
  * Function computeHash
  * Returns hash of "key"
  */
-__device__ int computeHash(int key)
+__device__ unsigned int computeHash(int key)
 {
-	/* TODO: proper hash */
-	return key;
+	/* both a and b are prime numbers */
+	return (key * 32069) % 694847539;
 }
 
 /**
@@ -62,7 +62,7 @@ __global__ void kernel_reshape(struct GpuHashTable::kv *oldTable, int oldSize, s
 		return;
 	
 	int value = oldTable[idx].value;
-	int hash = computeHash(key);
+	unsigned int hash = computeHash(key);
 	int old;
 
 	/* no stop condition: guaranteed there are enough empty spaces with key = KEY_INVALID */
@@ -116,7 +116,7 @@ __global__ void kernel_insertBatch(struct GpuHashTable::kv *table, int size, int
 
 	int key = keys[idx];
 	int value = values[idx];
-	int hash = computeHash(key);
+	unsigned int hash = computeHash(key);
 	int old;
 
 	/* no stop condition: guaranteed there are enough empty spaces with key = KEY_INVALID */
@@ -186,7 +186,7 @@ __global__ void kernel_getBatch(struct GpuHashTable::kv *table, int size, int *k
 
 	/* keysValues acts as an input+output buffer */
 	int key = keysValues[idx];
-	int hash = computeHash(key);
+	unsigned int hash = computeHash(key);
 	int maxSteps = size;
 
 	/* if we can't find a match in "size" steps -> abort (key not found) */
