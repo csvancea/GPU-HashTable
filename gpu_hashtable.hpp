@@ -19,6 +19,11 @@ using namespace std;
 class GpuHashTable
 {
 	public:
+		struct kv {
+			int key;
+			int value;
+		};
+
 		GpuHashTable(int size);
 		void reshape(int sizeReshape);
 
@@ -26,6 +31,16 @@ class GpuHashTable
 		int* getBatch(int* key, int numItems);
 
 		~GpuHashTable();
+
+	private:
+		/* Vector of key:value pairs */
+		kv *table;
+
+		/* Non-empty slots */
+		int count;
+
+		/* Total size (Empty + non-empty slots) */
+		int size;
 };
 
 #endif
