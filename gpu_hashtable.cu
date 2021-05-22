@@ -43,10 +43,62 @@ GpuHashTable::~GpuHashTable() {
 }
 
 /**
+ * Kernel reshape
+ * Performs the reshape on GPU side
+ */
+__global__ void kernel_reshape(struct GpuHashTable::kv *oldTable, int oldSize, struct GpuHashTable::kv *newTable, int newSize) {
+	int idx = threadIdx.x + blockDim.x * blockIdx.x;
+
+	if (idx >= oldSize)
+		return;
+
+	int key = oldTable[idx].key;
+
+	/* nothing to add */
+	if (key == KEY_INVALID)
+		return;
+	
+	int value = oldTable[idx].value;
+	int hash = computeHash(key);
+	int old;
+
+	/* no stop condition: guaranteed there are enough empty spaces with key = KEY_INVALID */
+	for (int i = hash % newSize; ; i = (i+1) % newSize) {
+		old = atomicCAS(&newTable[i].key, KEY_INVALID, key);
+
+		if (old == KEY_INVALID) {
+			/* table[i].key was set previously */
+			newTable[i].value = value;
+			break;
+		}
+	}
+}
+
+/**
  * Function reshape
  * Performs resize of the hashtable based on load factor
  */
 void GpuHashTable::reshape(int numBucketsReshape) {
+	cudaError_t err;
+	kv *devNewTable;
+	int numBlocks;
+
+	err = glbGpuAllocator->_cudaMalloc((void **) &devNewTable, numBucketsReshape * sizeof(struct kv));
+	cudaCheckError(err);
+
+	/* set everything to KEY_INVALID */
+	cudaMemset(devNewTable, KEY_INVALID, numBucketsReshape * sizeof(struct kv));
+
+	/* trick to round up result of size/THREADS_PER_BLOCK */
+	numBlocks = (size + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
+
+	kernel_reshape<<<numBlocks, THREADS_PER_BLOCK>>>(table, size, devNewTable, numBucketsReshape);
+	err = cudaDeviceSynchronize();
+	cudaCheckError(err);
+
+	glbGpuAllocator->_cudaFree(table);
+	table = devNewTable;
+	size = numBucketsReshape;
 }
 
 /**
