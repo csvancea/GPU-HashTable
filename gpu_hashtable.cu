@@ -108,7 +108,7 @@ void GpuHashTable::reshape(int numBucketsReshape) {
  * Kernel insertBatch
  * Performs insertion
  */
-__global__ void kernel_insertBatch(struct GpuHashTable::kv *table, int size, int *keys, int* values, int numKeys) {
+__global__ void kernel_insertBatch(struct GpuHashTable::kv *table, int size, int *keys, int* values, int numKeys, int *insertCounter) {
 	int idx = threadIdx.x + blockDim.x * blockIdx.x;
 
 	if (idx >= numKeys)
@@ -127,6 +127,11 @@ __global__ void kernel_insertBatch(struct GpuHashTable::kv *table, int size, int
 		if (old == KEY_INVALID || old == key) {
 			/* table[i].key was set previously */
 			table[i].value = value;
+
+			if (old == KEY_INVALID) {
+				/* actual insert */
+				atomicAdd(insertCounter, 1);
+			}
 			break;
 		}
 	}
@@ -138,9 +143,13 @@ __global__ void kernel_insertBatch(struct GpuHashTable::kv *table, int size, int
  */
 bool GpuHashTable::insertBatch(int *keys, int* values, int numKeys) {
 	cudaError_t err;
-	int *devKeys, *devValues;
-	int numBlocks;
+	int *devKeys, *devValues, *devInsertCounter;
+	int numBlocks, numInsertedKeys;
 
+	/*
+	 * this block of code guarantees that load factor will always be in interval: [50% ... 100%]
+	 * (as required by the checker)
+	 */
 	if (numItems + numKeys > size) {
 		int newSize = size;
 
@@ -157,20 +166,28 @@ bool GpuHashTable::insertBatch(int *keys, int* values, int numKeys) {
 	err = glbGpuAllocator->_cudaMalloc((void **) &devValues, numKeys * sizeof(int));
 	cudaCheckError(err);
 
+	err = glbGpuAllocator->_cudaMalloc((void **) &devInsertCounter, 1 * sizeof(int));
+	cudaCheckError(err);
+
 	cudaMemcpy(devKeys, keys, numKeys * sizeof(int), cudaMemcpyHostToDevice);
 	cudaMemcpy(devValues, values, numKeys * sizeof(int), cudaMemcpyHostToDevice);
+	cudaMemset(devInsertCounter, 0, 1 * sizeof(int));
 
 	/* trick to round up result of numKeys/THREADS_PER_BLOCK */
 	numBlocks = (numKeys + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
 
-	kernel_insertBatch<<<numBlocks, THREADS_PER_BLOCK>>>(devTable, size, devKeys, devValues, numKeys);
+	kernel_insertBatch<<<numBlocks, THREADS_PER_BLOCK>>>(devTable, size, devKeys, devValues, numKeys, devInsertCounter);
 	err = cudaDeviceSynchronize();
 	cudaCheckError(err);
 
+	cudaMemcpy(&numInsertedKeys, devInsertCounter, 1 * sizeof(int), cudaMemcpyDeviceToHost);
+
+	glbGpuAllocator->_cudaFree(devInsertCounter);
 	glbGpuAllocator->_cudaFree(devValues);
 	glbGpuAllocator->_cudaFree(devKeys);
 
-	numItems += numKeys;
+	/* can't increment with numKeys since some operations might actually be updates */
+	numItems += numInsertedKeys;
 	return true;
 }
 
