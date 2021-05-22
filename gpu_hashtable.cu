@@ -26,8 +26,10 @@ __device__ int computeHash(int key)
  * Performs init
  */
 GpuHashTable::GpuHashTable(int size) : table(nullptr), count(0), size(size) {
-	glbGpuAllocator->_cudaMalloc((void **) &table, size * sizeof(struct kv));
-	cudaCheckError();
+	cudaError_t err;
+
+	err = glbGpuAllocator->_cudaMalloc((void **) &table, size * sizeof(struct kv));
+	cudaCheckError(err);
 
 	/* set everything to KEY_INVALID */
 	cudaMemset(table, KEY_INVALID, size * sizeof(struct kv));
@@ -80,6 +82,7 @@ __global__ void kernel_insertBatch(struct GpuHashTable::kv *table, int size, int
  * Inserts a batch of key:value, using GPU and wrapper allocators
  */
 bool GpuHashTable::insertBatch(int *keys, int* values, int numKeys) {
+	cudaError_t err;
 	int *devKeys, *devValues;
 	int numBlocks;
 
@@ -94,11 +97,11 @@ bool GpuHashTable::insertBatch(int *keys, int* values, int numKeys) {
 	}
 
 	/* TODO: try cudaMallocManaged instead of cudaMalloc + cudaMemcpy */
-	glbGpuAllocator->_cudaMalloc((void **) &devKeys, numKeys * sizeof(int));
-	cudaCheckError();
+	err = glbGpuAllocator->_cudaMalloc((void **) &devKeys, numKeys * sizeof(int));
+	cudaCheckError(err);
 
-	glbGpuAllocator->_cudaMalloc((void **) &devValues, numKeys * sizeof(int));
-	cudaCheckError();
+	err = glbGpuAllocator->_cudaMalloc((void **) &devValues, numKeys * sizeof(int));
+	cudaCheckError(err);
 
 	cudaMemcpy(devKeys, keys, numKeys * sizeof(int), cudaMemcpyHostToDevice);
 	cudaMemcpy(devValues, values, numKeys * sizeof(int), cudaMemcpyHostToDevice);
@@ -107,8 +110,8 @@ bool GpuHashTable::insertBatch(int *keys, int* values, int numKeys) {
 	numBlocks = (numKeys + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
 
 	kernel_insertBatch<<<numBlocks, THREADS_PER_BLOCK>>>(table, size, devKeys, devValues, numKeys);
-	cudaDeviceSynchronize();
-	cudaCheckError();
+	err = cudaDeviceSynchronize();
+	cudaCheckError(err);
 
 	glbGpuAllocator->_cudaFree(devValues);
 	glbGpuAllocator->_cudaFree(devKeys);
@@ -145,16 +148,17 @@ __global__ void kernel_getBatch(struct GpuHashTable::kv *table, int size, int *k
  * Gets a batch of key:value, using GPU
  */
 int* GpuHashTable::getBatch(int* keys, int numKeys) {
+	cudaError_t err;
 	int *devKeys, *sharedValues;
 	int numBlocks;
 
 	/* TODO: try cudaMallocManaged instead of cudaMalloc + cudaMemcpy */
-	glbGpuAllocator->_cudaMalloc((void **) &devKeys, numKeys * sizeof(int));
-	cudaCheckError();
+	err = glbGpuAllocator->_cudaMalloc((void **) &devKeys, numKeys * sizeof(int));
+	cudaCheckError(err);
 
 	/* TODO: fix this leak */
-	glbGpuAllocator->_cudaMallocManaged((void **) &sharedValues, numKeys * sizeof(int));
-	cudaCheckError();
+	err = glbGpuAllocator->_cudaMallocManaged((void **) &sharedValues, numKeys * sizeof(int));
+	cudaCheckError(err);
 
 	cudaMemcpy(devKeys, keys, numKeys * sizeof(int), cudaMemcpyHostToDevice);
 
@@ -162,8 +166,8 @@ int* GpuHashTable::getBatch(int* keys, int numKeys) {
 	numBlocks = (numKeys + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
 
 	kernel_getBatch<<<numBlocks, THREADS_PER_BLOCK>>>(table, size, devKeys, sharedValues, numKeys);
-	cudaDeviceSynchronize();
-	cudaCheckError();
+	err = cudaDeviceSynchronize();
+	cudaCheckError(err);
 
 	glbGpuAllocator->_cudaFree(devKeys);
 	return sharedValues;

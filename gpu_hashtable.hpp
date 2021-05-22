@@ -5,10 +5,9 @@
 
 using namespace std;
 
-#define cudaCheckError() { \
-	cudaError_t e=cudaGetLastError(); \
+#define cudaCheckError(e) { \
 	if(e!=cudaSuccess) { \
-		cout << "Cuda failure " << __FILE__ << ", " << __LINE__ << ", " << cudaGetErrorString(e); \
+		cout << "Cuda failure " << __FILE__ << ":" << __LINE__ << ", " << cudaGetErrorString(e) << " (" << e << ")" << endl; \
 		exit(0); \
 	 }\
 }
