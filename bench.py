@@ -72,8 +72,8 @@ for program in programs:
 
         try:
             output = subprocess.check_output(['./' + program, testEntries, testChunks, testSpeed])
-            lines = str(output).split("\n")
-            print( output )
+            lines = str(output).split("\\n")
+            print( '\n'.join(lines).strip() )
 
         except Exception:
 
