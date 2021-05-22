@@ -124,20 +124,21 @@ bool GpuHashTable::insertBatch(int *keys, int* values, int numKeys) {
  * Kernel getBatch
  * Performs retrieval
  */
-__global__ void kernel_getBatch(struct GpuHashTable::kv *table, int size, int *keys, int* values, int numKeys) {
+__global__ void kernel_getBatch(struct GpuHashTable::kv *table, int size, int *keysValues, int numKeys) {
 	int idx = threadIdx.x + blockDim.x * blockIdx.x;
 
 	if (idx >= numKeys)
 		return;
 
-	int key = keys[idx];
+	/* keysValues acts as an input+output buffer */
+	int key = keysValues[idx];
 	int hash = computeHash(key);
 	int maxSteps = size;
 
 	/* if we can't find a match in "size" steps -> abort (key not found) */
 	for (int i = hash % size; maxSteps != 0; i = (i+1) % size, maxSteps--) {
 		if (table[i].key == key) {
-			values[idx] = table[i].value;
+			keysValues[idx] = table[i].value;
 			break;
 		}
 	}
@@ -149,26 +150,28 @@ __global__ void kernel_getBatch(struct GpuHashTable::kv *table, int size, int *k
  */
 int* GpuHashTable::getBatch(int* keys, int numKeys) {
 	cudaError_t err;
-	int *devKeys, *sharedValues;
+	int *devKeysValues, *retValues;
 	int numBlocks;
 
 	/* TODO: try cudaMallocManaged instead of cudaMalloc + cudaMemcpy */
-	err = glbGpuAllocator->_cudaMalloc((void **) &devKeys, numKeys * sizeof(int));
+	err = glbGpuAllocator->_cudaMalloc((void **) &devKeysValues, numKeys * sizeof(int));
 	cudaCheckError(err);
 
-	/* TODO: fix this leak */
-	err = glbGpuAllocator->_cudaMallocManaged((void **) &sharedValues, numKeys * sizeof(int));
-	cudaCheckError(err);
-
-	cudaMemcpy(devKeys, keys, numKeys * sizeof(int), cudaMemcpyHostToDevice);
+	cudaMemcpy(devKeysValues, keys, numKeys * sizeof(int), cudaMemcpyHostToDevice);
 
 	/* trick to round up result of numKeys/THREADS_PER_BLOCK */
 	numBlocks = (numKeys + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
 
-	kernel_getBatch<<<numBlocks, THREADS_PER_BLOCK>>>(table, size, devKeys, sharedValues, numKeys);
+	kernel_getBatch<<<numBlocks, THREADS_PER_BLOCK>>>(table, size, devKeysValues, numKeys);
+
+	/* alloc the returned vector while GPU is retrieving the values; TODO: fix leak */
+	retValues = (int *)malloc(numKeys * sizeof(int));
+	DIE(retValues == NULL, "malloc failed");
+
 	err = cudaDeviceSynchronize();
 	cudaCheckError(err);
 
-	glbGpuAllocator->_cudaFree(devKeys);
-	return sharedValues;
+	cudaMemcpy(retValues, devKeysValues, numKeys * sizeof(int), cudaMemcpyDeviceToHost);
+	glbGpuAllocator->_cudaFree(devKeysValues);
+	return retValues;
 }
