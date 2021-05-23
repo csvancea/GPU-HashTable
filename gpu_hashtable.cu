@@ -64,7 +64,7 @@ __global__ void kernel_reshape(struct GpuHashTable::kv *oldTable, unsigned int o
 	/* nothing to add */
 	if (key == KEY_INVALID)
 		return;
-	
+
 	int value = oldTable[idx].value;
 	unsigned int hash = hashKey(key);
 	int old;
@@ -221,7 +221,7 @@ __global__ void kernel_getBatch(struct GpuHashTable::kv *table, unsigned int siz
 /**
  * Function getBatch
  * Gets a batch of key:value, using GPU
- * 
+ *
  * Note: It'd been better if the caller passed the output vector for values
  */
 int* GpuHashTable::getBatch(int* keys, int numKeys) {
