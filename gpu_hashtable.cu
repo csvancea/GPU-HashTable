@@ -22,7 +22,7 @@ using namespace std;
 __device__ unsigned int hashKey(int key)
 {
 	/* both a and b are prime numbers */
-	return (key * 32069) % 694847539;
+	return (32069ULL * key) % 694847539;
 }
 
 /**
