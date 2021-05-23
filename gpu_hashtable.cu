@@ -90,6 +90,7 @@ void GpuHashTable::reshape(int numBucketsReshape) {
 	kv *devNewTable;
 	unsigned int numBlocks;
 
+	/* alloc new (resized) table */
 	err = glbGpuAllocator->_cudaMalloc((void **) &devNewTable, numBucketsReshape * sizeof(struct kv));
 	cudaCheckError(err);
 
@@ -155,8 +156,8 @@ bool GpuHashTable::insertBatch(int *keys, int* values, int numKeys) {
 	newLoadFactor = (numItems + numKeys) * 100 / size;
 	if (newLoadFactor >= MAX_LOAD_FACTOR) {
 		/*
-		 * (numItems + numKeys) * 100 / size = MIN_LOAD_FACTOR
-		 * => newSize = ((numItems + numKeys) * 100) / MIN_LOAD_FACTOR
+		 * (numItems + numKeys) * 100 / newSize = MIN_LOAD_FACTOR
+		 * => newSize = ... (see below)
 		 */
 
 		newSize = ((numItems + numKeys) * 100) / MIN_LOAD_FACTOR;
@@ -213,16 +214,19 @@ __global__ void kernel_getBatch(struct GpuHashTable::kv *table, unsigned int siz
 	for (unsigned int i = hash % size; maxSteps != 0; i = (i+1) % size, maxSteps--) {
 		if (table[i].key == key) {
 			keysValues[idx] = table[i].value;
-			break;
+			return;
 		}
 	}
+
+	/* key not found */
+	keysValues[idx] = KEY_INVALID;
 }
 
 /**
  * Function getBatch
  * Gets a batch of key:value, using GPU
  *
- * Note: It'd been better if the caller passed the output vector for values
+ * Note: It'd been better if the caller provided the output vector for values
  */
 int* GpuHashTable::getBatch(int* keys, int numKeys) {
 	cudaError_t err;
