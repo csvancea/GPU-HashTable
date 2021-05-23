@@ -9,16 +9,17 @@
 
 #define THREADS_PER_BLOCK 256
 
-#define MIN_LOAD_FACTOR 51
+/* Load factors are declared as integers to avoid floating point operations */
+#define MIN_LOAD_FACTOR 65
 #define MAX_LOAD_FACTOR 80
 
 using namespace std;
 
 /**
- * Function computeHash
+ * Function hashKey
  * Returns hash of "key"
  */
-__device__ unsigned int computeHash(int key)
+__device__ unsigned int hashKey(int key)
 {
 	/* both a and b are prime numbers */
 	return (key * 32069) % 694847539;
@@ -65,7 +66,7 @@ __global__ void kernel_reshape(struct GpuHashTable::kv *oldTable, unsigned int o
 		return;
 	
 	int value = oldTable[idx].value;
-	unsigned int hash = computeHash(key);
+	unsigned int hash = hashKey(key);
 	int old;
 
 	/* no stop condition: guaranteed there are enough empty spaces with key = KEY_INVALID */
@@ -119,7 +120,7 @@ __global__ void kernel_insertBatch(struct GpuHashTable::kv *table, unsigned int 
 
 	int key = keys[idx];
 	int value = values[idx];
-	unsigned int hash = computeHash(key);
+	unsigned int hash = hashKey(key);
 	int old;
 
 	/* no stop condition: guaranteed there are enough empty spaces with key = KEY_INVALID */
@@ -205,7 +206,7 @@ __global__ void kernel_getBatch(struct GpuHashTable::kv *table, unsigned int siz
 
 	/* keysValues acts as an input+output buffer */
 	int key = keysValues[idx];
-	unsigned int hash = computeHash(key);
+	unsigned int hash = hashKey(key);
 	unsigned int maxSteps = size;
 
 	/* if we can't find a match in "size" steps -> abort (key not found) */
